@@ -3,15 +3,23 @@
 # Author: Siddhant Jajoo.
 
 set -e
+#!/bin/bash
+# Script outline to install and build kernel.
+# Author: Siddhant Jajoo.
+
+set -e
 set -u
 
-OUTDIR=/tmp/aeld
+OUTDIR=${OUTDIR:=/tmp/aeld}
 KERNEL_REPO=git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
 KERNEL_VERSION=v5.1.10
 BUSYBOX_VERSION=1_33_1
 FINDER_APP_DIR=$(realpath $(dirname $0))
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
+CONFIG_PREFIX="${OUTDIR}/rootfs"
+SYSROOT=$(${CROSS_COMPILE}gcc -print-sysroot)
+dir=$(pwd)
 
 if [ $# -lt 1 ]
 then
@@ -33,12 +41,20 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     cd linux-stable
     echo "Checking out version ${KERNEL_VERSION}"
     git checkout ${KERNEL_VERSION}
-
+echo "Fixing the yalloc issue in this version of kernel"
+	sed -i 's/^YYLTYPE yylloc/extern YYLTYPE yylloc/g' ${OUTDIR}/linux-stable/scripts/dtc/dtc-lexer.l
     # TODO: Add your kernel build steps here
+
+    	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
+	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
+	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
+	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules
+	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} dtbs
+
 fi
 
 echo "Adding the Image in outdir"
-
+	cp -a ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ${OUTDIR}/Image
 echo "Creating the staging directory for the root filesystem"
 cd "$OUTDIR"
 if [ -d "${OUTDIR}/rootfs" ]
@@ -48,33 +64,69 @@ then
 fi
 
 # TODO: Create necessary base directories
+	mkdir ${OUTDIR}/rootfs
+	cd ${OUTDIR}/rootfs
+	mkdir bin dev etc home lib lib64 proc sbin sys tmp usr var conf
+	mkdir usr/bin usr/lib usr/sbin
+	mkdir -p var/log
 
+	 
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/busybox" ]
 then
 git clone git://busybox.net/busybox.git
     cd busybox
     git checkout ${BUSYBOX_VERSION}
-    # TODO:  Configure busybox
+    # TODO:  Configure busybox 
+	make -j4 distclean
 else
     cd busybox
 fi
 
 # TODO: Make and install busybox
+  
+   # mkdir -pv ${OUTDIR}/rootfs/bin/busybox
+	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${CONFIG_PREFIX} defconfig
+    make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
+    make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${CONFIG_PREFIX} install
 
+# adding the modules
+    #make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} INSTALL_MOD_PATH="${OUTDIR}/rootfs" modules_install
+cd "${CONFIG_PREFIX}"
 echo "Library dependencies"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
-
+ls -l "${SYSROOT}/lib/ld-linux-aarch64.so.1"
 # TODO: Add library dependencies to rootfs
-
+	cp -a ${SYSROOT}/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib	
+	cp  ${SYSROOT}/lib64/ld-2.31.so ${OUTDIR}/rootfs/lib64		
+	cp  ${SYSROOT}/lib64/libc.so.6 ${OUTDIR}/rootfs/lib64	
+	cp  ${SYSROOT}/lib64/libc-2.31.so ${OUTDIR}/rootfs/lib64		
+	cp  ${SYSROOT}/lib64/libm.so.6 ${OUTDIR}/rootfs/lib64	 
+	cp 	${SYSROOT}/lib64/libm-2.31.so ${OUTDIR}/rootfs/lib64		
+	cp  ${SYSROOT}/lib64/libresolv.so.2 ${OUTDIR}/rootfs/lib64	
+	cp  ${SYSROOT}/lib64/libresolv-2.31.so ${OUTDIR}/rootfs/lib64	 
 # TODO: Make device nodes
-
+	sudo mknod -m 666 ${OUTDIR}/rootfs/dev/null c 1 3
+	sudo mknod -m 600 ${OUTDIR}/rootfs/dev/console c 5 1
 # TODO: Clean and build the writer utility
-
+	cd "${dir}"
+	make clean
+	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} writer
 # TODO: Copy the finder related scripts and executables to the /home directory
 # on the target rootfs
-
+	cp -r ../conf/* ${OUTDIR}/rootfs/conf
+	cp -a conf	${OUTDIR}/rootfs/home/
+	cp finder.sh ${OUTDIR}/rootfs/home/
+	cp finder-test.sh ${OUTDIR}/rootfs/home/
+	cp autorun-qemu.sh ${OUTDIR}/rootfs/home/
+	cp writer ${OUTDIR}/rootfs/home/
 # TODO: Chown the root directory
-
+	cd ${OUTDIR}/rootfs
+	sudo chown -R root:root *
 # TODO: Create initramfs.cpio.gz
+	find . | cpio -H newc -ov --owner root:root > ../initramfs.cpio
+	cd ..
+	gzip initramfs.cpio
+	mkimage ARCH=${ARCH} -O linux -T ramdisk -d initramfs.cpio.gz uRamdisk
+
