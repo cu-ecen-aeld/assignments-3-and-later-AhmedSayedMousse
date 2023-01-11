@@ -13,6 +13,7 @@ FINDER_APP_DIR=$(realpath $(dirname $0))
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
 CONFIG_PREFIX="${OUTDIR}/rootfs"
+CROSS_COMPILE_BUSY=$(dirname $(which "aarch64-none-linux-gnu-gcc"))/aarch64-none-linux-gnu-
 SYSROOT=$(${CROSS_COMPILE}gcc -print-sysroot)
 
 if [ $# -lt 1 ]
@@ -81,8 +82,8 @@ fi
 # TODO: Make and install busybox
   
    # mkdir -pv ${OUTDIR}/rootfs/bin/busybox
-make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
-make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${CONFIG_PREFIX} install
+sudo make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE_BUSY}
+sudo make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE_BUSY} CONFIG_PREFIX=${CONFIG_PREFIX} install
 
 # adding the modules
     #make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} INSTALL_MOD_PATH="${OUTDIR}/rootfs" modules_install
