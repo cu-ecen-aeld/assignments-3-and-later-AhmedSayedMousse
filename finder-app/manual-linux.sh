@@ -39,16 +39,16 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
 	sed -i 's/^YYLTYPE yylloc/extern YYLTYPE yylloc/g' ${OUTDIR}/linux-stable/scripts/dtc/dtc-lexer.l
     # TODO: Add your kernel build steps here
 
-    make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
-	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
+    	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
+	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
 	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
-	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules
-	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} dtbs
+	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules
+	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} dtbs
 
 fi
 
 echo "Adding the Image in outdir"
-	cp ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ${OUTDIR}/
+	cp ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ${OUTDIR}/Image
 echo "Creating the staging directory for the root filesystem"
 cd "$OUTDIR"
 if [ -d "${OUTDIR}/rootfs" ]
@@ -72,8 +72,8 @@ git clone git://busybox.net/busybox.git
     cd busybox
     git checkout ${BUSYBOX_VERSION}
     # TODO:  Configure busybox 
-	make -j4 distclean
-	make -j4 defconfig
+	make distclean
+	make defconfig
 else
     cd busybox
 fi
@@ -81,8 +81,8 @@ fi
 # TODO: Make and install busybox
   
    # mkdir -pv ${OUTDIR}/rootfs/bin/busybox
-make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
-make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${CONFIG_PREFIX} install
+make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
+make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${CONFIG_PREFIX} install
 
 # adding the modules
     #make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} INSTALL_MOD_PATH="${OUTDIR}/rootfs" modules_install

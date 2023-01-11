@@ -1,5 +1,13 @@
 #include "systemcalls.h"
-
+#include <stdlib.h>
+#include "systemcalls.h"
+#include <stdlib.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <syslog.h>
 /**
  * @param cmd the command to execute with system()
  * @return true if the command in @param cmd was executed
@@ -7,6 +15,7 @@
  *   either in invocation of the system() call, or if a non-zero return
  *   value was returned by the command issued in @param cmd.
 */
+
 bool do_system(const char *cmd)
 {
 
@@ -16,7 +25,9 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
+	int rc =system(cmd);
+	if (rc != 0)
+		return false;
     return true;
 }
 
@@ -37,6 +48,7 @@ bool do_system(const char *cmd)
 bool do_exec(int count, ...)
 {
     va_list args;
+    openlog(NULL, 0, LOG_USER);
     va_start(args, count);
     char * command[count+1];
     int i;
@@ -49,6 +61,9 @@ bool do_exec(int count, ...)
     // and may be removed
     command[count] = command[count];
 
+   
+ 
+
 /*
  * TODO:
  *   Execute a system command by calling fork, execv(),
@@ -58,12 +73,26 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
-
+	int status_parent;
+	pid_t pid;
+	pid = fork();
+	if (pid == -1){ return false;}
+	else if (pid == 0){
+		int status_child;
+		status_child = execv(command[0], command);
+		if (status_child == -1)
+			exit(EXIT_FAILURE);
+	}
+	if (waitpid (pid, &status_parent, 0) == -1){
+		return false;}
+	else if (WIFEXITED (status_parent)){
+		int status = WEXITSTATUS(status_parent);
+		if (status != 0 ){ return false;}
+	}
     va_end(args);
 
     return true;
 }
-
 /**
 * @param outputfile - The full path to the file to write with command output.
 *   This file will be closed at completion of the function call.
@@ -82,8 +111,6 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
-
 
 /*
  * TODO
@@ -91,9 +118,30 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   redirect standard out to a file specified by outputfile.
  *   The rest of the behaviour is same as do_exec()
  *
-*/
-
-    va_end(args);
+*/	int status;
+	pid_t pid;
+	int fd = open(outputfile, O_CREAT|O_WRONLY|O_TRUNC, 0644);
+	if (fd < 0) { return false;}
+	switch(pid = fork()){
+		case -1: return false;
+		case 0: 
+			if (dup2(fd, 1) <0) {return false;}
+			close(fd);
+			status = execv(command[0], command);
+			if (status == -1)
+				exit(EXIT_FAILURE);
+		default:
+			close(fd);
+			if (waitpid (pid, &status, 0) == -1)
+				return false;
+		    	else if (WIFEXITED (status)){
+				int status_child = WEXITSTATUS(status);
+				if (status_child != 0) 
+					return false;
+			}
+	}
+	
+	va_end(args);
 
     return true;
 }
