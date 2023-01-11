@@ -3,11 +3,6 @@
 # Author: Siddhant Jajoo.
 
 set -e
-#!/bin/bash
-# Script outline to install and build kernel.
-# Author: Siddhant Jajoo.
-
-set -e
 set -u
 
 OUTDIR=${OUTDIR:=/tmp/aeld}
@@ -19,7 +14,6 @@ ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
 CONFIG_PREFIX="${OUTDIR}/rootfs"
 SYSROOT=$(${CROSS_COMPILE}gcc -print-sysroot)
-dir=$(pwd)
 
 if [ $# -lt 1 ]
 then
@@ -41,11 +35,11 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     cd linux-stable
     echo "Checking out version ${KERNEL_VERSION}"
     git checkout ${KERNEL_VERSION}
-echo "Fixing the yalloc issue in this version of kernel"
+	echo "Fixing the yalloc issue in this version of kernel"
 	sed -i 's/^YYLTYPE yylloc/extern YYLTYPE yylloc/g' ${OUTDIR}/linux-stable/scripts/dtc/dtc-lexer.l
     # TODO: Add your kernel build steps here
 
-    	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
+    make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
 	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
 	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
 	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules
@@ -54,7 +48,7 @@ echo "Fixing the yalloc issue in this version of kernel"
 fi
 
 echo "Adding the Image in outdir"
-	cp -a ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ${OUTDIR}/Image
+	cp ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ${OUTDIR}/
 echo "Creating the staging directory for the root filesystem"
 cd "$OUTDIR"
 if [ -d "${OUTDIR}/rootfs" ]
@@ -79,6 +73,7 @@ git clone git://busybox.net/busybox.git
     git checkout ${BUSYBOX_VERSION}
     # TODO:  Configure busybox 
 	make -j4 distclean
+	make -j4 defconfig
 else
     cd busybox
 fi
@@ -86,31 +81,31 @@ fi
 # TODO: Make and install busybox
   
    # mkdir -pv ${OUTDIR}/rootfs/bin/busybox
-	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${CONFIG_PREFIX} defconfig
-    make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
-    make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${CONFIG_PREFIX} install
+make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
+make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${CONFIG_PREFIX} install
 
 # adding the modules
     #make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} INSTALL_MOD_PATH="${OUTDIR}/rootfs" modules_install
-cd "${CONFIG_PREFIX}"
+
+cd "${OUTDIR}/rootfs"
 echo "Library dependencies"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "program interpreter"
 ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
-ls -l "${SYSROOT}/lib/ld-linux-aarch64.so.1"
+#ls -l "${SYSROOT}/lib/ld-linux-aarch64.so.1"
 # TODO: Add library dependencies to rootfs
-	cp -a ${SYSROOT}/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib	
+	cp  ${SYSROOT}/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib	
 	cp  ${SYSROOT}/lib64/ld-2.31.so ${OUTDIR}/rootfs/lib64		
 	cp  ${SYSROOT}/lib64/libc.so.6 ${OUTDIR}/rootfs/lib64	
 	cp  ${SYSROOT}/lib64/libc-2.31.so ${OUTDIR}/rootfs/lib64		
 	cp  ${SYSROOT}/lib64/libm.so.6 ${OUTDIR}/rootfs/lib64	 
-	cp 	${SYSROOT}/lib64/libm-2.31.so ${OUTDIR}/rootfs/lib64		
+	cp  ${SYSROOT}/lib64/libm-2.31.so ${OUTDIR}/rootfs/lib64		
 	cp  ${SYSROOT}/lib64/libresolv.so.2 ${OUTDIR}/rootfs/lib64	
 	cp  ${SYSROOT}/lib64/libresolv-2.31.so ${OUTDIR}/rootfs/lib64	 
 # TODO: Make device nodes
 	sudo mknod -m 666 ${OUTDIR}/rootfs/dev/null c 1 3
 	sudo mknod -m 600 ${OUTDIR}/rootfs/dev/console c 5 1
 # TODO: Clean and build the writer utility
-	cd "${dir}"
+	cd "${FINDER_APP_DIR}"
 	make clean
 	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} writer
 # TODO: Copy the finder related scripts and executables to the /home directory
@@ -128,5 +123,5 @@ ls -l "${SYSROOT}/lib/ld-linux-aarch64.so.1"
 	find . | cpio -H newc -ov --owner root:root > ../initramfs.cpio
 	cd ..
 	gzip initramfs.cpio
-	mkimage ARCH=${ARCH} -O linux -T ramdisk -d initramfs.cpio.gz uRamdisk
+	#mkimage ARCH=${ARCH} -O linux -T ramdisk -d initramfs.cpio.gz uRamdisk
 
