@@ -13,7 +13,6 @@ FINDER_APP_DIR=$(realpath $(dirname $0))
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
 CONFIG_PREFIX="${OUTDIR}/rootfs"
-CROSS_COMPILE_BUSY=$(dirname $(which "aarch64-none-linux-gnu-gcc"))/aarch64-none-linux-gnu-
 SYSROOT=$(${CROSS_COMPILE}gcc -print-sysroot)
 
 if [ $# -lt 1 ]
@@ -42,7 +41,7 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
 
     	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} mrproper
 	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
-	make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
+	make -j8 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} all
 	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} modules
 	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} dtbs
 
@@ -74,7 +73,7 @@ git clone git://busybox.net/busybox.git
     git checkout ${BUSYBOX_VERSION}
     # TODO:  Configure busybox 
 	make distclean
-	make defconfig
+	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} defconfig
 else
     cd busybox
 fi
@@ -82,8 +81,8 @@ fi
 # TODO: Make and install busybox
   
    # mkdir -pv ${OUTDIR}/rootfs/bin/busybox
-sudo make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE_BUSY}
-sudo make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE_BUSY} CONFIG_PREFIX=${CONFIG_PREFIX} install
+make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE}
+make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} CONFIG_PREFIX=${CONFIG_PREFIX} install
 
 # adding the modules
     #make -j4 ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} INSTALL_MOD_PATH="${OUTDIR}/rootfs" modules_install
@@ -95,13 +94,13 @@ ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
 #ls -l "${SYSROOT}/lib/ld-linux-aarch64.so.1"
 # TODO: Add library dependencies to rootfs
 	cp  ${SYSROOT}/lib/ld-linux-aarch64.so.1 ${OUTDIR}/rootfs/lib	
-	cp  ${SYSROOT}/lib64/ld-2.31.so ${OUTDIR}/rootfs/lib64		
-	cp  ${SYSROOT}/lib64/libc.so.6 ${OUTDIR}/rootfs/lib64	
-	cp  ${SYSROOT}/lib64/libc-2.31.so ${OUTDIR}/rootfs/lib64		
-	cp  ${SYSROOT}/lib64/libm.so.6 ${OUTDIR}/rootfs/lib64	 
-	cp  ${SYSROOT}/lib64/libm-2.31.so ${OUTDIR}/rootfs/lib64		
-	cp  ${SYSROOT}/lib64/libresolv.so.2 ${OUTDIR}/rootfs/lib64	
-	cp  ${SYSROOT}/lib64/libresolv-2.31.so ${OUTDIR}/rootfs/lib64	 
+	cp  ${SYSROOT}/lib64/ld-2.31.so   		${OUTDIR}/rootfs/lib64		
+	cp  ${SYSROOT}/lib64/libc.so.6    		${OUTDIR}/rootfs/lib64	
+	cp  ${SYSROOT}/lib64/libc-2.31.so 		${OUTDIR}/rootfs/lib64		
+	cp  ${SYSROOT}/lib64/libm.so.6 			${OUTDIR}/rootfs/lib64	 
+	cp  ${SYSROOT}/lib64/libm-2.31.so 		${OUTDIR}/rootfs/lib64		
+	cp  ${SYSROOT}/lib64/libresolv.so.2 	${OUTDIR}/rootfs/lib64	
+	cp  ${SYSROOT}/lib64/libresolv-2.31.so  ${OUTDIR}/rootfs/lib64	 
 # TODO: Make device nodes
 	sudo mknod -m 666 ${OUTDIR}/rootfs/dev/null c 1 3
 	sudo mknod -m 600 ${OUTDIR}/rootfs/dev/console c 5 1
@@ -111,12 +110,12 @@ ${CROSS_COMPILE}readelf -a bin/busybox | grep "Shared library"
 	make ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} writer
 # TODO: Copy the finder related scripts and executables to the /home directory
 # on the target rootfs
-	cp -r ../conf/* ${OUTDIR}/rootfs/conf
-	cp -a conf	${OUTDIR}/rootfs/home/
-	cp finder.sh ${OUTDIR}/rootfs/home/
-	cp finder-test.sh ${OUTDIR}/rootfs/home/
-	cp autorun-qemu.sh ${OUTDIR}/rootfs/home/
-	cp writer ${OUTDIR}/rootfs/home/
+	cp -r ./../conf/*    	${OUTDIR}/rootfs/conf
+	cp -a ./conf	     	${OUTDIR}/rootfs/home/
+	cp    ./finder.sh    	${OUTDIR}/rootfs/home/
+	cp    ./finder-test.sh  ${OUTDIR}/rootfs/home/
+	cp    ./autorun-qemu.sh ${OUTDIR}/rootfs/home/
+	cp    ./writer 	   		${OUTDIR}/rootfs/home/
 # TODO: Chown the root directory
 	cd ${OUTDIR}/rootfs
 	sudo chown -R root:root *
