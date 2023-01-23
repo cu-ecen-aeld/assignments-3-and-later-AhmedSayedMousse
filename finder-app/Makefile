@@ -1,4 +1,6 @@
 
+all:
+	clean writer
 writer:
 ifdef CROSS_COMPILE
 	$(CROSS_COMPILE)gcc -o writer writer.c
