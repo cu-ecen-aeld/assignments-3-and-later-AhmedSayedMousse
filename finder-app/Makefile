@@ -1,8 +1,8 @@
-ARCH:=arm64
-CROSS_COMPILE:=aarch64-none-linux-gnu-
-all: clean writer
-writer:
-	$(CROSS_COMPILE)gcc -o writer writer.c
+all: writer
+writer.o: writer.c
+	$(CC) $(CCFLAGS) -c writer.c	
+writer: writer.o
+	$(CC) $(LDFLAGS) writer.o -o writer
 clean:
 	$(RM) writer.o writer
 
