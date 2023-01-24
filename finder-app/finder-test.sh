@@ -30,9 +30,10 @@ MATCHSTR="The number of files are ${NUMFILES} and the number of matching lines a
 
 echo "Writing ${NUMFILES} files containing string ${WRITESTR} to ${WRITEDIR}"
 
-
 # create $WRITEDIR if not assignment1
 assignment=`cat /etc/finder-app/conf/assignment.txt`
+
+rm -rf "${WRITEDIR}"
 
 if [ $assignment != 'assignment1' ]
 then
@@ -50,8 +51,6 @@ then
 fi
 
 echo "Removing the old writer utility and compiling as a native application"
-
- 
 #make clean
 #make
 
@@ -63,6 +62,9 @@ done
 
 OUTPUTSTRING=$(finder.sh "$WRITEDIR" "$WRITESTR")
 echo ${OUTPUTSTRING} > ${RESULTFILE}
+# remove temporary directories
+rm -rf /tmp/aeld-data
+
 # remove temporary directories
 rm -rf /tmp/aeld-data
 
