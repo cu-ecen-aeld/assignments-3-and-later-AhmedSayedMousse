@@ -11,6 +11,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #define PORT "9000" 			
 #define BACKLOG 1   			
@@ -23,14 +24,15 @@ int sockfd;
 void sig_handler(int sig_num);
 void *get_in_addr(struct sockaddr *sa);
 void  clean_close(void);
+void *clientthread(void *clientfdptr);
 
 int main(int argc, char** argv)
 {
 	int new_fd, rv, yes=1;
-	char *packetBuffer, s[INET6_ADDRSTRLEN];
-	ssize_t no_bytes;  // this one is signed
+	char  s[INET6_ADDRSTRLEN];
+	//ssize_t no_bytes;  // this one is signed
 	socklen_t sin_size; // size of addr string
-	FILE *fp;
+
 	struct sigaction siga;
 	struct addrinfo hints, *res;
 	struct sockaddr_storage their_addr;
@@ -146,58 +148,31 @@ int main(int argc, char** argv)
 			clean_close();
 		}
 		syslog(LOG_DEBUG, "Accepted connection from %s", s);
-		fp = fopen(DATAFILE_PATH, "a+");
-		packetBuffer = malloc(BUFFER_SIZE+1);
-		char *line=NULL;
-		size_t len = 0;
-		do
-		{
-			if ((no_bytes = recv(new_fd, packetBuffer, BUFFER_SIZE, 0)) == -1)
-			{
-				perror("Recieve");
-				syslog(LOG_ERR, "Receive error");
-				shutdown(new_fd, SHUT_RDWR);
-				close(new_fd);
-				clean_close();
-			}
-			packetBuffer[no_bytes] = '\0';
-			if (fprintf(fp, "%s", packetBuffer) <0)
-			{
-				perror("printing to file");
-				syslog(LOG_ERR, "printing to file");
-				shutdown(new_fd, SHUT_RDWR);
-				close(new_fd);
-				clean_close();
-			}
-			if (index(packetBuffer, '\n') != NULL)
-			{
-				// set the start to the begining of the file
-				rewind(fp);
-				// read line by line and send on the socket
-				while((no_bytes = getline(&line, &len, 
-							  fp)) != -1)
-				{
-					if (send(new_fd, line, no_bytes, 0)
-					    == -1)
-					{
-						perror("Failed to send");
-						syslog(LOG_ERR, "Send");
-						free(packetBuffer);
-						free(line);
-						fclose(fp);
-						shutdown(new_fd, SHUT_RDWR);
-						close(new_fd);
-						clean_close();
-					}
-					syslog(LOG_INFO, "Sent %ld", no_bytes);
-				}
-			}
-			
-		}while(no_bytes >0);
-		free(packetBuffer);
-		fclose(fp);
-		close(new_fd);
-	  	syslog(LOG_INFO, "Closed connection from %s\n", s);
+		
+		int ret, retval = 0;
+		pthread_t thread;
+
+		ret = pthread_create(&thread, NULL, clientthread, &new_fd);
+		if (ret != 0) {
+
+		}
+
+		ret = pthread_join(thread, (void **)&retval);
+		if (ret != 0) {
+
+		}
+
+
+		// TODO end
+		
+		// Close client file descriptor
+		if (close(new_fd) == -1) {
+		    perror("client close");
+		    exit(-1);
+		}
+	    	
+		// Log closed client IP address to syslog
+		syslog(LOG_INFO, "Closed connection from %s\n", s);
 	}
 	clean_close();
 }
@@ -234,4 +209,98 @@ void *get_in_addr(struct sockaddr *sa)
     }
 
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+void *clientthread(void *clientfdptr)
+{
+    int fd;
+    int flags;
+    char *buf, *rbuf;
+    ssize_t len, cnt;
+    int clientfd = *(int*)clientfdptr;
+    //pthread_mutex_t mutex;
+    //int ret;
+
+    // Acquire mutex lock to guard simultaneous file I/O
+    /*
+    ret = pthread_mutex_lock(&mutex);
+    DEBUG("pthread_mutex_lock return: %d\n", ret);
+    if (ret != 0) {
+	error(-1, ret, "pthread_mutex_lock");
+    }
+    */
+    // Open data file, create if does not exist
+    flags = O_RDWR | O_APPEND;
+    if (access(DATAFILE_PATH, F_OK) != 0) flags |= O_CREAT;
+    if ((fd = open(DATAFILE_PATH, flags, 0644)) == -1) {
+	    perror("open");
+	    //pthread_exit((void *)-1);
+	    return (void *)-1;
+    }
+
+	// Allocate buffers
+    buf = (char *)malloc(BUFFER_SIZE+1);
+    rbuf = (char *)malloc(BUFFER_SIZE+1);
+
+    // Read incoming socket data stream, write to data file and return response to outgoing data stream
+    do {
+	// read incoming socket data stream
+	if ((len = recv(clientfd, (void *)buf, BUFFER_SIZE, 0)) == -1) {
+	    perror("recv");
+	    //pthread_exit((void *)-1);
+	    return (void *)-1;
+	}
+	
+	// write to data file
+	buf[len] = '\0';
+	
+	if ((write(fd, buf, len)) != len) {
+	    perror("write");
+	    //pthread_exit((void *)-1);
+	    return (void *)-1;
+	}
+
+	// data packet found
+	if (index(buf, '\n') != 0) {
+
+	    // seek to beginning of file
+	    if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
+		perror("lseek");
+		//pthread_exit((void *)-1);
+		return (void *)-1;
+	    }
+		
+	    // return file contents in outgoing data stream
+	    while ((cnt = read(fd, rbuf, BUFFER_SIZE)) != 0) {
+		rbuf[cnt] = '\0';
+
+		if ((cnt = send(clientfd, (void *)rbuf, cnt, 0)) == -1) {
+		    perror("send");
+		    //pthread_exit((void *)-1);
+		    return (void *)-1;
+		}
+	
+	    }
+	}
+	
+    } while (len > 0); // socket data stream closed
+
+    // Free buffers
+    free(buf);
+    free(rbuf);
+
+    // Close data file
+    close(fd);
+
+    // Release mutex lock
+    /*
+    ret = pthread_mutex_unlock(&mutex);
+    DEBUG("pthread_mutex_unlock return: %d\n", ret);
+    if (ret != 0) {
+	error(-1, ret, "pthread_mutex_unlock");
+    }
+    */
+    // Exit thread with success
+    //pthread_exit((void *)0);
+    return (void *)0;
 }
