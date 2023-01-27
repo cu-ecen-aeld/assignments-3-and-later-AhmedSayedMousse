@@ -14,7 +14,7 @@
 
 #define PORT "9000" 			
 #define BACKLOG 1   			
-#define BUFFER_SIZE 128 		
+#define BUFFER_SIZE 1024 		
 #define DATAFILE_PATH "/var/tmp/aesdsocketdata"
 
 
@@ -22,6 +22,7 @@ bool signal_flag = false;
 int sockfd;
 void sig_handler(int sig_num);
 void *get_in_addr(struct sockaddr *sa);
+void  clean_close(void);
 
 int main(int argc, char** argv)
 {
@@ -32,7 +33,7 @@ int main(int argc, char** argv)
 	socklen_t sin_size; // size of addr string
 	FILE *fp;
 	struct sigaction siga;
-	struct addrinfo hints, *res, *p;
+	struct addrinfo hints, *res;
 	struct sockaddr_storage their_addr;
 	
 //==============
@@ -44,7 +45,6 @@ int main(int argc, char** argv)
 	hints.ai_flags = AI_PASSIVE;
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_protocol = 0;
 //==============
 
 	// Get the addr info
@@ -55,48 +55,34 @@ int main(int argc, char** argv)
 	}
 //==============
 
-	//loop on the res linked list until a socket is binded
-	for (p=res; p!=NULL; p = p->ai_next)
+	// 
+	if ((sockfd=socket(res->ai_family, res->ai_socktype,
+				   res->ai_protocol)) == -1)
 	{
-		if ((sockfd=socket(p->ai_family, p->ai_socktype,
-				   p->ai_protocol)) == -1)
-		{
-			perror("Couldn't create socket");
-			syslog(LOG_ERR, "Serevr: Socket");
-			continue;
-		} 
-		
-		if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-			       sizeof(yes)) == -1)
-		{
-			perror("Couldn't Set option");
-			syslog(LOG_ERR, "Server: Option");
-			shutdown(sockfd, SHUT_RDWR);
-			close(sockfd);
-			exit(EXIT_FAILURE);
-		}
-		
-		if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1)
-		{
-			perror("Couldn't Bind"); 
-			syslog(LOG_ERR, "Server: bind");
-			continue;
-		}
-		// socket creation and binding is done.
-		syslog(LOG_DEBUG, "Socket created");
-		break;
+		perror("Couldn't create socket");
+		syslog(LOG_ERR, "Server: Socket");
+		exit(EXIT_FAILURE);
+	} 
+	
+	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
+		       sizeof yes) == -1)
+	{
+		perror("Couldn't Set option");
+		syslog(LOG_ERR, "Server: Option");
+		clean_close();
 	}
+	
+	if (bind(sockfd,res->ai_addr, res->ai_addrlen) == -1)
+	{
+		perror("Couldn't Bind"); 
+		syslog(LOG_ERR, "Server: bind");
+		clean_close();
+
+	}
+	// socket creation and binding is done.
+	syslog(LOG_DEBUG, "Socket created");
 	freeaddrinfo(res);
 	
-	// make sure the for terminated because it binded not runover
-	if (p == NULL)
-	{
-		perror("Server didn't bind");
-		syslog(LOG_ERR, "Server: Finished without binding");
-		shutdown(sockfd, SHUT_RDWR);
-		close(sockfd);
-		exit(EXIT_FAILURE);
-	}
 //==============
 
 	//listen
@@ -104,23 +90,23 @@ int main(int argc, char** argv)
 	{
 		perror("Server didn't listen");
 		syslog(LOG_ERR, "Server: listen");
-		shutdown(sockfd, SHUT_RDWR);
-		exit(EXIT_FAILURE);
+		clean_close();
 	}
 //==============
 	
 	//set the action handlers
 	siga.sa_handler = sig_handler;
-	sigemptyset(&siga.sa_mask);
-	siga.sa_flags = SA_RESTART;
-	if (sigaction(SIGINT, &siga, NULL) == -1 || 
-	    sigaction(SIGTERM, &siga, NULL) == -1)
+	if (sigaction(SIGINT, &siga, NULL) == -1)
 	{
-		perror("sigaction register");
-		syslog(LOG_ERR, "sigaction couldn't register");
-		shutdown(sockfd, SHUT_RDWR);
-		close(sockfd);
-		exit(EXIT_FAILURE);
+		perror("SIGINT register");
+		syslog(LOG_ERR, "SIGINT couldn't register");
+		clean_close();
+	}
+	if (sigaction(SIGTERM, &siga, NULL) == -1)
+	{
+		perror("SIGTERM register");
+		syslog(LOG_ERR, "SIGTERM couldn't register");
+		clean_close();
 	}
 //==============
 
@@ -134,29 +120,31 @@ int main(int argc, char** argv)
 			{
 				perror("Daemon error");
 				syslog(LOG_ERR, "Daemon error");
-				shutdown(sockfd, SHUT_RDWR);
-				close(sockfd);
-				exit(EXIT_FAILURE);
+				clean_close();
 			}
 		}
 	}
 
 	//main loop
-	while(signal_flag == false)
+	while(!signal_flag)
 	{
 		if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr,
 				     &sin_size)) == -1)
 		{
 			perror("Error accepting");
 			syslog(LOG_ERR, "Server: Accept");
-			continue;
+			clean_close();
 		}
 		
 		// get the address string
 		memset(&s, 0, INET6_ADDRSTRLEN);
-		inet_ntop(their_addr.ss_family,
+		if (inet_ntop(their_addr.ss_family,
 			  get_in_addr((struct sockaddr *)&their_addr), s,
-			  sizeof s);
+			  sizeof s) == NULL)
+		{
+			syslog(LOG_ERR, "inet_ntop");
+			clean_close();
+		}
 		syslog(LOG_DEBUG, "Accepted connection from %s", s);
 
 		packetBuffer = malloc(sizeof(char));
@@ -216,11 +204,7 @@ int main(int argc, char** argv)
 						free(recvBuffer);
 						free(packetBuffer);
 						fclose(fp);
-						remove(DATAFILE_PATH);
-						shutdown(sockfd, SHUT_RDWR);
-						close(sockfd);
-						shutdown(new_fd, SHUT_RDWR);
-						exit(EXIT_FAILURE);
+						clean_close();
 					}
 
 				}
@@ -232,23 +216,32 @@ int main(int argc, char** argv)
 			free(recvBuffer);
 		}
 		free(packetBuffer);
-		shutdown(new_fd, SHUT_RDWR);
-		close(sockfd);
+		clean_close();
 	}
+	clean_close();
+}
+void  clean_close(void)
+{
+	syslog(LOG_ERR, "Closing");
 	shutdown(sockfd, SHUT_RDWR);
 	close(sockfd);
-	remove(DATAFILE_PATH);
-	exit(EXIT_SUCCESS);
+	if (access(DATAFILE_PATH, F_OK) == 0) {
+	    if (remove(DATAFILE_PATH) == -1) {
+		perror("remove");
+		syslog(LOG_ERR, "remove");
+		exit(EXIT_FAILURE);
+	    }
+	}
+	if (signal_flag)
+		exit(EXIT_SUCCESS);
+	exit(EXIT_FAILURE);
 }
-
 void sig_handler(int sig_num)
 {
 	if (sig_num == SIGINT || sig_num == SIGTERM)
 	{
 		signal_flag = true;
 		syslog(LOG_INFO, "Caught signal, exiting");
-		shutdown(sockfd, SHUT_RDWR);
-		close(sockfd);
 	}
 	return;
 }
