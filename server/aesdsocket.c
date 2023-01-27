@@ -25,12 +25,40 @@
 //==============
 bool signal_flag = false;
 
-//=================
-// 	PROTOTYPES
-//=================
-void sig_handler(int sig_num);
-void *get_in_addr(struct sockaddr *sa);
-void  clean_close(void);
+//====================================
+// 	HELPER FUNCTIONS
+//=====================================
+void  clean_close(void)
+{
+	syslog(LOG_ERR, "Closing");
+	if (access(DATAFILE_PATH, F_OK) == 0) {
+	    if (remove(DATAFILE_PATH) == -1) {
+		perror("remove");
+		syslog(LOG_ERR, "remove");
+		exit(EXIT_FAILURE);
+	    }
+	}
+	if (signal_flag)
+		exit(EXIT_SUCCESS);
+	exit(EXIT_FAILURE);
+}
+void sig_handler(int sig_num)
+{
+	if (sig_num == SIGINT || sig_num == SIGTERM)
+	{
+		signal_flag = true;
+		syslog(LOG_INFO, "Caught signal, exiting");
+	}
+	return;
+}
+void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
 
 //==============
 // 	MAIN
@@ -75,8 +103,7 @@ int main(int argc, char** argv)
 		exit(EXIT_FAILURE);
 	} 
 	
-	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-		       sizeof yes) == -1)
+	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1)
 	{
 		perror("Couldn't Set option");
 		syslog(LOG_ERR, "Server: Option");
@@ -138,7 +165,7 @@ int main(int argc, char** argv)
 
 	//main loop
 	while(!signal_flag)
-	{
+	{	syslog(LOG_INFO, "Entered mainloop");
 		sin_size = sizeof their_addr;
 		if ((new_fd = accept(sockfd, their_addrPtr,
 				     &sin_size)) == -1)
@@ -169,6 +196,7 @@ int main(int argc, char** argv)
 		size_t len = 0;
 		do
 		{
+			syslog(LOG_INFO, "Entered acceptloop");
 			if ((no_bytes = recv(new_fd, packetBuffer, BUFFER_SIZE, 0)) == -1)
 			{
 				perror("Recieve");
@@ -200,48 +228,16 @@ int main(int argc, char** argv)
 			}
 			
 		}while(no_bytes >0);
+		syslog(LOG_INFO, "Exited acceptloop");
 		free(packetBuffer);
 		fclose(fp);
 		close(new_fd);
 	  	syslog(LOG_INFO, "Closed connection from %s\n", s);
 	}
+	syslog(LOG_INFO, "Exited mainloop");
 	shutdown(sockfd, SHUT_RDWR);
 	close(sockfd);
 	clean_close();
 }
 
-//=====================================
-// 	HELPER FUNCTIONS
-//=====================================
-void  clean_close(void)
-{
-	syslog(LOG_ERR, "Closing");
-	if (access(DATAFILE_PATH, F_OK) == 0) {
-	    if (remove(DATAFILE_PATH) == -1) {
-		perror("remove");
-		syslog(LOG_ERR, "remove");
-		exit(EXIT_FAILURE);
-	    }
-	}
-	if (signal_flag)
-		exit(EXIT_SUCCESS);
-	exit(EXIT_FAILURE);
-}
-void sig_handler(int sig_num)
-{
-	if (sig_num == SIGINT || sig_num == SIGTERM)
-	{
-		signal_flag = true;
-		syslog(LOG_INFO, "Caught signal, exiting");
-	}
-	return;
-}
 
-void *get_in_addr(struct sockaddr *sa)
-{
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
-
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
