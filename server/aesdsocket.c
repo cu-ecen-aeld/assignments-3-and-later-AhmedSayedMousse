@@ -161,12 +161,15 @@ int main(int argc, char** argv)
 				syslog(LOG_ERR, "Daemon error");
 				exit(EXIT_FAILURE);
 			}
+			syslog(LOG_INFO, "Option detected");
 		}
 	}
 
 	//main loop
 	while(!signal_flag)
-	{	syslog(LOG_INFO, "Entered mainloop");
+	{	
+		perror("Daemon error");
+		syslog(LOG_INFO, "Entered mainloop");
 		sin_size = sizeof their_addr;
 		if ((new_fd = accept(sockfd, their_addrPtr,
 				     &sin_size)) == -1)
