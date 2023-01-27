@@ -29,7 +29,7 @@ void *clientthread(void *clientfdptr);
 int main(int argc, char** argv)
 {
 	int new_fd, rv, yes=1;
-	char  s[INET6_ADDRSTRLEN];
+	char  s[INET_ADDRSTRLEN];
 	//ssize_t no_bytes;  // this one is signed
 	socklen_t sin_size; // size of addr string
 
@@ -44,7 +44,7 @@ int main(int argc, char** argv)
 	// Set the hints
 	memset(&(hints), 0, sizeof(hints));
 	hints.ai_flags = AI_PASSIVE;
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 //==============
 
