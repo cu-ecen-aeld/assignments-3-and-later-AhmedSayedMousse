@@ -24,7 +24,7 @@
 // 	GLOBALS
 //==============
 bool signal_flag = false;
-
+int sockfd;
 //====================================
 // 	HELPER FUNCTIONS
 //=====================================
@@ -48,6 +48,7 @@ void sig_handler(int sig_num)
 	{
 		signal_flag = true;
 		syslog(LOG_INFO, "Caught signal, exiting");
+		close(sockfd);
 	}
 	return;
 }
@@ -65,7 +66,7 @@ void *get_in_addr(struct sockaddr *sa)
 //==============
 int main(int argc, char** argv)
 {
-	int sockfd, new_fd, rv, yes=1;
+	int new_fd, rv, yes=1;
 	char *packetBuffer, s[INET6_ADDRSTRLEN];
 	ssize_t no_bytes;  // this one is signed
 	socklen_t sin_size; // size of addr string
