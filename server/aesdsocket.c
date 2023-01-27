@@ -231,15 +231,17 @@ int main(int argc, char** argv)
 	}
 	shutdown(sockfd, SHUT_RDWR);
 	remove(DATAFILE_PATH);
-	exit(1);
+	exit(EXIT_SUCCESS);
 }
 
 void sig_handler(int sig_num)
 {
-	signal_flag = true;
-	syslog(LOG_INFO, "Caught signal, exiting");
-	remove(DATAFILE_PATH);
-	shutdown(sockfd, SHUT_RDWR);
+	if (sig_num == SIGINT || sig_num == SIGTERM)
+	{
+		signal_flag = true;
+		syslog(LOG_INFO, "Caught signal, exiting");
+		shutdown(sockfd, SHUT_RDWR);
+	}
 	return;
 }
 
