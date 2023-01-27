@@ -155,20 +155,19 @@ int main(int argc, char** argv)
 		if (opt == 'd')
 		{
 			syslog(LOG_INFO, "Option detected");
-			if (daemon(0, 0) == -1)
+			if ((rv = daemon(0, 0)) == -1)
 			{
 				perror("Daemon error");
 				syslog(LOG_ERR, "Daemon error");
 				exit(EXIT_FAILURE);
 			}
-			syslog(LOG_INFO, "Option detected");
+			syslog(LOG_INFO, "Daemon created %d", rv);
 		}
 	}
 
 	//main loop
 	while(true)
 	{	
-		perror("Daemon error");
 		syslog(LOG_INFO, "Entered mainloop");
 		sin_size = sizeof their_addr;
 		if ((new_fd = accept(sockfd, their_addrPtr,
