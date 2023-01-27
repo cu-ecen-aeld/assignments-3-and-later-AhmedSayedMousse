@@ -166,7 +166,7 @@ int main(int argc, char** argv)
 	}
 
 	//main loop
-	while(!signal_flag)
+	while(true)
 	{	
 		perror("Daemon error");
 		syslog(LOG_INFO, "Entered mainloop");
@@ -179,7 +179,10 @@ int main(int argc, char** argv)
 			syslog(LOG_ERR, "Server: Accept");
 			exit(EXIT_FAILURE);
 		}
-		
+		if (signal_flag){
+			close(new_fd);
+			clean_close();
+		}
 		// get the address string
 		if (inet_ntop(their_addr.ss_family,
 			  get_in_addr(their_addrPtr), s, sizeof s) == NULL)
