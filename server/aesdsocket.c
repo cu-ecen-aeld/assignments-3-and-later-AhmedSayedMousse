@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
-#include <error.h>
+#include <errno.h>
 #include <fcntl.h>
 
 //==============
@@ -103,7 +103,7 @@ int main(int argc, char** argv)
 		exit(EXIT_FAILURE);
 	} 
 	
-	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1)
+	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &yes, sizeof yes) == -1)
 	{
 		perror("Couldn't Set option");
 		syslog(LOG_ERR, "Server: Option");
@@ -170,6 +170,7 @@ int main(int argc, char** argv)
 		if ((new_fd = accept(sockfd, their_addrPtr,
 				     &sin_size)) == -1)
 		{
+			if ( errno == EINTR) clean_close();
 			perror("Error accepting");
 			syslog(LOG_ERR, "Server: Accept");
 			exit(EXIT_FAILURE);
