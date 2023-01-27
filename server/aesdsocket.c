@@ -72,6 +72,7 @@ int main(int argc, char** argv)
 			perror("Couldn't Set option");
 			syslog(LOG_ERR, "Server: Option");
 			shutdown(sockfd, SHUT_RDWR);
+			close(sockfd);
 			exit(EXIT_FAILURE);
 		}
 		
@@ -93,6 +94,7 @@ int main(int argc, char** argv)
 		perror("Server didn't bind");
 		syslog(LOG_ERR, "Server: Finished without binding");
 		shutdown(sockfd, SHUT_RDWR);
+		close(sockfd);
 		exit(EXIT_FAILURE);
 	}
 //==============
@@ -117,6 +119,7 @@ int main(int argc, char** argv)
 		perror("sigaction register");
 		syslog(LOG_ERR, "sigaction couldn't register");
 		shutdown(sockfd, SHUT_RDWR);
+		close(sockfd);
 		exit(EXIT_FAILURE);
 	}
 //==============
@@ -132,6 +135,7 @@ int main(int argc, char** argv)
 				perror("Daemon error");
 				syslog(LOG_ERR, "Daemon error");
 				shutdown(sockfd, SHUT_RDWR);
+				close(sockfd);
 				exit(EXIT_FAILURE);
 			}
 		}
@@ -214,6 +218,7 @@ int main(int argc, char** argv)
 						fclose(fp);
 						remove(DATAFILE_PATH);
 						shutdown(sockfd, SHUT_RDWR);
+						close(sockfd);
 						shutdown(new_fd, SHUT_RDWR);
 						exit(EXIT_FAILURE);
 					}
@@ -228,8 +233,10 @@ int main(int argc, char** argv)
 		}
 		free(packetBuffer);
 		shutdown(new_fd, SHUT_RDWR);
+		close(sockfd);
 	}
 	shutdown(sockfd, SHUT_RDWR);
+	close(sockfd);
 	remove(DATAFILE_PATH);
 	exit(EXIT_SUCCESS);
 }
@@ -241,6 +248,7 @@ void sig_handler(int sig_num)
 		signal_flag = true;
 		syslog(LOG_INFO, "Caught signal, exiting");
 		shutdown(sockfd, SHUT_RDWR);
+		close(sockfd);
 	}
 	return;
 }
