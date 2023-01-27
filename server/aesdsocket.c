@@ -1,33 +1,3 @@
-
-Skip to content
-Pull requests
-Issues
-Codespaces
-Marketplace
-Explore
-@AhmedSayedMousse
-cu-ecen-aeld /
-assignments-3-and-later-booglabri
-Public
-
-Fork your own copy of cu-ecen-aeld/assignments-3-and-later-booglabri
-
-Code
-Issues
-Pull requests
-Actions
-Projects
-Security
-
-    Insights
-
-assignments-3-and-later-booglabri/server/aesdsocket.c
-@booglabri
-booglabri Swapped pthread_exit for return and simplified aesdsocket-start-stop.
-Latest commit 6d24b92 Jan 24, 2023
-History
-1 contributor
-301 lines (254 sloc) 7.35 KB
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -329,20 +299,5 @@ int main(int argc, char *argv[])
     // Exit cleanly
     exit(0);
 }
-Footer
-© 2023 GitHub, Inc.
-Footer navigation
-
-    Terms
-    Privacy
-    Security
-    Status
-    Docs
-    Contact GitHub
-    Pricing
-    API
-    Training
-    Blog
-    About
 
 
