@@ -8,7 +8,7 @@ case "$1" in
 
 start)
 	echo "Starting ${DAEMON}"
-	start-stop-daemon -S -o --d -n ${NAME} -a ${DAEMON_PATH}
+	start-stop-daemon -S -o -n ${NAME} -a ${DAEMON_PATH} -- -d
 	;;
 stop)
 	echo "Stopping ${DAEMONE}"
