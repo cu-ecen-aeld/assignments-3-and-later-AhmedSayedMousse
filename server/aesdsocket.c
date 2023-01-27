@@ -1,215 +1,72 @@
-#include <string.h> 
+
+Skip to content
+Pull requests
+Issues
+Codespaces
+Marketplace
+Explore
+@AhmedSayedMousse
+cu-ecen-aeld /
+assignments-3-and-later-booglabri
+Public
+
+Fork your own copy of cu-ecen-aeld/assignments-3-and-later-booglabri
+
+Code
+Issues
+Pull requests
+Actions
+Projects
+Security
+
+    Insights
+
+assignments-3-and-later-booglabri/server/aesdsocket.c
+@booglabri
+booglabri Swapped pthread_exit for return and simplified aesdsocket-start-stop.
+Latest commit 6d24b92 Jan 24, 2023
+History
+1 contributor
+301 lines (254 sloc) 7.35 KB
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netdb.h> 
-#include <syslog.h>
-#include <signal.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
-#include <arpa/inet.h>
+#include <string.h>
 #include <stdbool.h>
-#include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
+#include <syslog.h>
+#include <signal.h>
 #include <pthread.h>
+#include <error.h>
 
-#define PORT "9000" 			
-#define BACKLOG 1   			
-#define BUFFER_SIZE 1024 		
-#define DATAFILE_PATH "/var/tmp/aesdsocketdata"
+#define DEBUG(msg, ...)
+//#define DEBUG(msg, ...) fprintf(stderr, "DEBUG: " msg, ##__VA_ARGS__)
 
+#define PORT "9000"
+#define BACKLOG 5
+#define DATAFILE "/var/tmp/aesdsocketdata"
+#define BUFSIZE 1024
 
-bool signal_flag = false;
-int sockfd;
-void sig_handler(int sig_num);
-void *get_in_addr(struct sockaddr *sa);
-void  clean_close(void);
-void *clientthread(void *clientfdptr);
+bool sigcaught = false;
 
-int main(int argc, char** argv)
+//===================================================================
+// signal handler
+//===================================================================
+
+void signal_handler(int signo)
 {
-	int new_fd, rv, yes=1;
-	char  s[INET_ADDRSTRLEN];
-	//ssize_t no_bytes;  // this one is signed
-	socklen_t sin_size; // size of addr string
-
-	struct sigaction siga;
-	struct addrinfo hints, *res;
-	struct sockaddr_storage their_addr;
-	
-//==============
-	openlog(NULL, 0, LOG_USER);
-//==============
-
-	// Set the hints
-	memset(&(hints), 0, sizeof(hints));
-	hints.ai_flags = AI_PASSIVE;
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-//==============
-
-	// Get the addr info
-	if ((rv = getaddrinfo(NULL, PORT, &hints, &res)) !=0)
-	{	perror("Error: getaddrinfo");
-		syslog(LOG_ERR, "getaddrinfo error: %s\n", gai_strerror(rv));
-		exit(EXIT_FAILURE);
-	}
-//==============
-
-	// 
-	if ((sockfd=socket(res->ai_family, res->ai_socktype,
-				   res->ai_protocol)) == -1)
-	{
-		perror("Couldn't create socket");
-		syslog(LOG_ERR, "Server: Socket");
-		exit(EXIT_FAILURE);
-	} 
-	
-	if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
-		       sizeof yes) == -1)
-	{
-		perror("Couldn't Set option");
-		syslog(LOG_ERR, "Server: Option");
-		clean_close();
-	}
-	
-	if (bind(sockfd,res->ai_addr, res->ai_addrlen) == -1)
-	{
-		perror("Couldn't Bind"); 
-		syslog(LOG_ERR, "Server: bind");
-		clean_close();
-
-	}
-	// socket creation and binding is done.
-	syslog(LOG_DEBUG, "Socket created");
-	freeaddrinfo(res);
-	
-//==============
-
-	//listen
-	if (listen(sockfd, BACKLOG) == -1)
-	{
-		perror("Server didn't listen");
-		syslog(LOG_ERR, "Server: listen");
-		clean_close();
-	}
-//==============
-	
-	//set the action handlers
-	siga.sa_handler = sig_handler;
-	if (sigaction(SIGINT, &siga, NULL) == -1)
-	{
-		perror("SIGINT register");
-		syslog(LOG_ERR, "SIGINT couldn't register");
-		clean_close();
-	}
-	if (sigaction(SIGTERM, &siga, NULL) == -1)
-	{
-		perror("SIGTERM register");
-		syslog(LOG_ERR, "SIGTERM couldn't register");
-		clean_close();
-	}
-//==============
-
-	char opt;
-	while((opt = getopt(argc, argv, "d")) != -1)
-	{
-		if (opt == 'd')
-		{
-			syslog(LOG_INFO, "Option detected");
-			if (daemon(0, 0) == -1)
-			{
-				perror("Daemon error");
-				syslog(LOG_ERR, "Daemon error");
-				clean_close();
-			}
-		}
-	}
-
-	//main loop
-	while(!signal_flag)
-	{
-		sin_size = sizeof their_addr;
-		if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr,
-				     &sin_size)) == -1)
-		{
-			perror("Error accepting");
-			syslog(LOG_ERR, "Server: Accept");
-			clean_close();
-		}
-		
-		// get the address string
-		memset(&s, 0, INET6_ADDRSTRLEN);
-		if (inet_ntop(their_addr.ss_family,
-			  get_in_addr((struct sockaddr *)&their_addr), s,
-			  sizeof s) == NULL)
-		{
-			syslog(LOG_ERR, "inet_ntop");
-			clean_close();
-		}
-		syslog(LOG_DEBUG, "Accepted connection from %s", s);
-		
-		int ret, retval = 0;
-		pthread_t thread;
-
-		ret = pthread_create(&thread, NULL, clientthread, &new_fd);
-		if (ret != 0) {
-
-		}
-
-		ret = pthread_join(thread, (void **)&retval);
-		if (ret != 0) {
-
-		}
-
-
-		// TODO end
-		
-		// Close client file descriptor
-		if (close(new_fd) == -1) {
-		    perror("client close");
-		    exit(-1);
-		}
-	    	
-		// Log closed client IP address to syslog
-		syslog(LOG_INFO, "Closed connection from %s\n", s);
-	}
-	clean_close();
-}
-void  clean_close(void)
-{
-	syslog(LOG_ERR, "Closing");
-	shutdown(sockfd, SHUT_RDWR);
-	close(sockfd);
-	if (access(DATAFILE_PATH, F_OK) == 0) {
-	    if (remove(DATAFILE_PATH) == -1) {
-		perror("remove");
-		syslog(LOG_ERR, "remove");
-		exit(EXIT_FAILURE);
-	    }
-	}
-	if (signal_flag)
-		exit(EXIT_SUCCESS);
-	exit(EXIT_FAILURE);
-}
-void sig_handler(int sig_num)
-{
-	if (sig_num == SIGINT || sig_num == SIGTERM)
-	{
-		signal_flag = true;
-		syslog(LOG_INFO, "Caught signal, exiting");
-	}
-	return;
+    if (signo == SIGINT || signo == SIGTERM) sigcaught = true;
 }
 
-void *get_in_addr(struct sockaddr *sa)
-{
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
-
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
+//===================================================================
+// client thread
+//===================================================================
 
 void *clientthread(void *clientfdptr)
 {
@@ -231,21 +88,21 @@ void *clientthread(void *clientfdptr)
     */
     // Open data file, create if does not exist
     flags = O_RDWR | O_APPEND;
-    if (access(DATAFILE_PATH, F_OK) != 0) flags |= O_CREAT;
-    if ((fd = open(DATAFILE_PATH, flags, 0644)) == -1) {
+    if (access(DATAFILE, F_OK) != 0) flags |= O_CREAT;
+    if ((fd = open(DATAFILE, flags, 0644)) == -1) {
 	    perror("open");
 	    //pthread_exit((void *)-1);
 	    return (void *)-1;
     }
 
 	// Allocate buffers
-    buf = (char *)malloc(BUFFER_SIZE+1);
-    rbuf = (char *)malloc(BUFFER_SIZE+1);
+    buf = (char *)malloc(BUFSIZE+1);
+    rbuf = (char *)malloc(BUFSIZE+1);
 
     // Read incoming socket data stream, write to data file and return response to outgoing data stream
     do {
 	// read incoming socket data stream
-	if ((len = recv(clientfd, (void *)buf, BUFFER_SIZE, 0)) == -1) {
+	if ((len = recv(clientfd, (void *)buf, BUFSIZE, 0)) == -1) {
 	    perror("recv");
 	    //pthread_exit((void *)-1);
 	    return (void *)-1;
@@ -253,7 +110,7 @@ void *clientthread(void *clientfdptr)
 	
 	// write to data file
 	buf[len] = '\0';
-	
+	DEBUG("recv len: %d  buf: |%s|\n", (int)len, buf);
 	if ((write(fd, buf, len)) != len) {
 	    perror("write");
 	    //pthread_exit((void *)-1);
@@ -271,15 +128,15 @@ void *clientthread(void *clientfdptr)
 	    }
 		
 	    // return file contents in outgoing data stream
-	    while ((cnt = read(fd, rbuf, BUFFER_SIZE)) != 0) {
+	    while ((cnt = read(fd, rbuf, BUFSIZE)) != 0) {
 		rbuf[cnt] = '\0';
-
+		DEBUG("send cnt: %d rbuf: |%s|\n", (int)cnt, rbuf);
 		if ((cnt = send(clientfd, (void *)rbuf, cnt, 0)) == -1) {
 		    perror("send");
 		    //pthread_exit((void *)-1);
 		    return (void *)-1;
 		}
-	
+		DEBUG("sent cnt: %d\n", (int)cnt);
 	    }
 	}
 	
@@ -304,3 +161,188 @@ void *clientthread(void *clientfdptr)
     //pthread_exit((void *)0);
     return (void *)0;
 }
+
+//===================================================================
+// main
+//===================================================================
+
+int main(int argc, char *argv[])
+{
+    struct addrinfo hints, *res;
+    struct sockaddr_storage client_addr;
+    struct sockaddr_in *client_addrptr = (struct sockaddr_in *)&client_addr;
+    socklen_t client_addrsize;
+    int sockfd, clientfd;
+    int status;
+    int yes=1;
+    char client_ipstr[INET_ADDRSTRLEN];
+    struct sigaction act;
+    int ret, retval = 0;
+    pthread_t thread;
+
+    // Setup up signal handling
+    memset(&act, 0, sizeof(struct sigaction));
+    act.sa_handler = signal_handler;
+    if (sigaction(SIGINT, &act, NULL) == -1) {
+	perror("sigaction SIGINT");
+	exit(-1);
+    }
+    if (sigaction(SIGTERM, &act, NULL) == -1) {
+	perror("sigaction SIGTERM");
+	exit(-1);
+    }
+
+    // Open syslog
+    openlog(argv[0], LOG_CONS | LOG_PERROR | LOG_PID | LOG_NDELAY, LOG_USER);
+
+    // Setup getaddrinfo hints
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    // Get address info
+    if ((status = getaddrinfo(NULL, PORT, &hints, &res)) != 0) {
+	fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+	exit(-1);
+    }
+
+    // Check that only one address exists
+    //DEBUG("res->ai_next: %p\n", (void *)res->ai_next);
+    //for (int *p = res; p != NULL; p = p->ai_next) {
+    //	if (p->ai_family == AF_INET) break;
+    //}
+    if (res->ai_next != NULL) {
+	fprintf(stderr, "More that one address identified\n");
+	exit(-1);
+    }
+
+    // Create socket
+    if ((sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) {
+	perror("socket");
+	exit(-1);
+    }
+
+    // Set socket options to reuse address
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+	perror("setsockopt");
+	exit(-1);
+    }
+
+    // Bind socket to port
+    if (bind(sockfd, res->ai_addr, res->ai_addrlen) == -1) {
+	perror("bind");
+	exit(-1);
+    }
+
+    // Switch to daemon mode if argument -d is passed
+    DEBUG("argc: %d argv[1]: %s\n", argc, argv[1]);
+    if (argc == 2 && strncmp(argv[1], "-d", 2) == 0) {
+	DEBUG("daemon mode\n");
+	if (daemon(0, 0) == -1) {
+	    perror("daemon");
+	    exit(-1);
+	}
+    }
+
+    // Listen for client connection request
+    if (listen(sockfd, BACKLOG) == -1) {
+	perror("listen");
+	exit(-1);
+    }
+
+    // Loop listening for clients unti SIGINT or SIGTERM is received
+    while(true) {
+
+        // Accept connection from client
+	client_addrsize = sizeof client_addr;
+        if ((clientfd = accept(sockfd, (struct sockaddr *)&client_addr, &client_addrsize)) == -1) {
+	    if (sigcaught) goto CLEANUP;
+	    perror("accept");
+	    exit(-1);
+        }
+        if (inet_ntop(client_addrptr->sin_family, (void *)&client_addrptr->sin_addr, client_ipstr, sizeof client_ipstr) == NULL) {
+	    perror("inet_ntop");
+	    exit(-1);
+        }
+
+        // Log accepted client IP to syslog
+        syslog(LOG_INFO, "Accepted connection from %s\n", client_ipstr);
+
+	// TODO begin
+	
+	ret = pthread_create(&thread, NULL, clientthread, &clientfd);
+	if (ret != 0) {
+	    error(-1, ret, "pthread_create");
+	}
+
+	ret = pthread_join(thread, (void **)&retval);
+	if (ret != 0) {
+	    error(-1, ret, "pthread_join");
+	}
+	DEBUG("thread retval: %d\n", retval);
+
+	// TODO end
+	
+        // Close client file descriptor
+        if (close(clientfd) == -1) {
+	    perror("client close");
+	    exit(-1);
+        }
+    	
+        // Log closed client IP address to syslog
+        syslog(LOG_INFO, "Closed connection from %s\n", client_ipstr);
+
+    } // End of client loop
+
+ CLEANUP:
+
+    // Handle exceptions SIGINT and SIGTERM
+    if (sigcaught) {
+	syslog(LOG_INFO, "Caught signal, exiting");
+	if (access(DATAFILE, F_OK) == 0) {
+	    if (remove(DATAFILE) == -1) {
+		perror("remove");
+		exit(-1);
+	    }
+	}
+    }
+
+    // Shutdown network connection
+    if (shutdown(sockfd, SHUT_RDWR) == -1) {
+	perror("shutdown");
+	exit(-1);
+    }
+
+    // Close socket file descriptor
+    if (close(sockfd) == -1) {
+	perror("socket close");
+	exit(-1);
+    }
+
+    // Free address info
+    freeaddrinfo(res);
+
+    // Close syslog
+    closelog();
+
+    // Exit cleanly
+    exit(0);
+}
+Footer
+© 2023 GitHub, Inc.
+Footer navigation
+
+    Terms
+    Privacy
+    Security
+    Status
+    Docs
+    Contact GitHub
+    Pricing
+    API
+    Training
+    Blog
+    About
+
+
