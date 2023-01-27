@@ -147,75 +147,65 @@ int main(int argc, char** argv)
 		}
 		syslog(LOG_DEBUG, "Accepted connection from %s", s);
 
-		packetBuffer = malloc(sizeof(char));
-		*packetBuffer = '\0';
-		total = 1;
-		while(signal_flag == false)
-		{
-			recvBuffer = malloc(BUFFER_SIZE*sizeof(char)+1);
-			memset(recvBuffer, '\0', BUFFER_SIZE+1);
-			no_bytes = recv(new_fd, recvBuffer, BUFFER_SIZE, 0);
-			if (no_bytes == -1)
-			{
-				perror("Error in receive");
-				syslog(LOG_ERR, "Receiving");
-				free(packetBuffer);
-				free(recvBuffer);
-				break;
-			}
-			
-			if(no_bytes == 0)
-			{
-				perror("Connection Closed");
-				syslog(LOG_DEBUG, 
-				       "Closed connection from %s", s);
-				free(recvBuffer);
-				break;
-			}
-			
+		flags = O_RDWR | O_APPEND;
+	    if (access(DATAFILE, F_OK) != 0) flags |= O_CREAT;
+	    if ((fd = open(DATAFILE, flags, 0644)) == -1) {
+		    perror("open");
+		    //pthread_exit((void *)-1);
+		    return (void *)-1;
+	    }
 
-			total += no_bytes;
-			packetBuffer = realloc(packetBuffer, 
-					       total*sizeof(char));
-			strncat(packetBuffer, recvBuffer, no_bytes);
-			//syslog(LOG_DEBUG, "packetBuffer: %s, %ld", packetBuffer, total);
-			//syslog(LOG_DEBUG, "Read %s", recvBuffer);
-			if (strchr(recvBuffer, '\n') != NULL)
-			{
-				// packet completed
-				// write it to the file
-				fp = fopen(DATAFILE_PATH, "a+");
-				fprintf(fp, "%s", packetBuffer);
-				
-				// send the file to the client
-				char *line=NULL;
-				size_t len = 0;
-				fseek(fp, 0, SEEK_SET);
-				while((no_bytes = getline(&line, &len, 
-							  fp)) != -1)
-				{
-					//syslog(LOG_DEBUG, "Line %s" , line);
-					//syslog(LOG_DEBUG, "Sending %s, %ld", line, no_bytes);
-					if (send(new_fd, line, no_bytes, 0)
-					    == -1)
-					{
-						perror("Failed to send");
-						syslog(LOG_ERR, "Send");
-						free(recvBuffer);
-						free(packetBuffer);
-						fclose(fp);
-						clean_close();
-					}
+		// Allocate buffers
+	    buf = (char *)malloc(BUFSIZE+1);
+	    rbuf = (char *)malloc(BUFSIZE+1);
 
-				}
-				free(recvBuffer);
-				free(line);
-				fclose(fp);
-				break;
-			}
-			free(recvBuffer);
+	    // Read incoming socket data stream, write to data file and return response to outgoing data stream
+	    do {
+		// read incoming socket data stream
+		if ((len = recv(clientfd, (void *)buf, BUFSIZE, 0)) == -1) {
+		    perror("recv");
+		    //pthread_exit((void *)-1);
+		    return (void *)-1;
 		}
-		free(packetBuffer);
+		
+		// write to data file
+		buf[len] = '\0';
+		DEBUG("recv len: %d  buf: |%s|\n", (int)len, buf);
+		if ((write(fd, buf, len)) != len) {
+		    perror("write");
+		    //pthread_exit((void *)-1);
+		    return (void *)-1;
+		}
+
+		// data packet found
+		if (index(buf, '\n') != 0) {
+
+		    // seek to beginning of file
+		    if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
+			perror("lseek");
+			//pthread_exit((void *)-1);
+			return (void *)-1;
+		    }
+			
+		    // return file contents in outgoing data stream
+		    while ((cnt = read(fd, rbuf, BUFSIZE)) != 0) {
+			rbuf[cnt] = '\0';
+			DEBUG("send cnt: %d rbuf: |%s|\n", (int)cnt, rbuf);
+			if ((cnt = send(clientfd, (void *)rbuf, cnt, 0)) == -1) {
+			    perror("send");
+			    //pthread_exit((void *)-1);
+			    return (void *)-1;
+			}
+			DEBUG("sent cnt: %d\n", (int)cnt);
+		    }
+		}
+		
+	    } while (len > 0); // socket data stream closed
+	  free(buf);
+	    free(rbuf);
+
+	    // Close data file
+	    close(fd);
 		clean_close();
 	}
 	clean_close();
