@@ -38,13 +38,14 @@ void  clean_close(void);
 int main(int argc, char** argv)
 {
 	int sockfd, new_fd, rv, yes=1;
-	char *packetBuffer, s[INET_ADDRSTRLEN];
+	char *packetBuffer, s[INET6_ADDRSTRLEN];
 	ssize_t no_bytes;  // this one is signed
 	socklen_t sin_size; // size of addr string
 	FILE *fp;
 	struct sigaction siga;
 	struct addrinfo hints, *res;
 	struct sockaddr_storage their_addr;
+	struct sockaddr *their_addrPtr = (struct sockaddr *)&their_addr;
 	
 //==============
 	openlog(NULL, LOG_NDELAY | LOG_PERROR | LOG_PID | LOG_CONS, LOG_USER);
@@ -53,7 +54,7 @@ int main(int argc, char** argv)
 	// Set the hints
 	memset(&(hints), 0, sizeof(hints));
 	hints.ai_flags = AI_PASSIVE;
-	hints.ai_family = AF_INET;
+	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 //==============
 
@@ -139,7 +140,7 @@ int main(int argc, char** argv)
 	while(!signal_flag)
 	{
 		sin_size = sizeof their_addr;
-		if ((new_fd = accept(sockfd, (struct sockaddr *)&their_addr,
+		if ((new_fd = accept(sockfd, their_addrPtr,
 				     &sin_size)) == -1)
 		{
 			perror("Error accepting");
@@ -149,14 +150,20 @@ int main(int argc, char** argv)
 		
 		// get the address string
 		if (inet_ntop(their_addr.ss_family,
-			  get_in_addr((struct sockaddr *)&their_addr), s,
-			  sizeof s) == NULL)
+			  get_in_addr(their_addrPtr), s, sizeof s) == NULL)
 		{
 			syslog(LOG_ERR, "inet_ntop");
 			exit(EXIT_FAILURE);
 		}
 		syslog(LOG_DEBUG, "Accepted connection from %s", s);
-		fp = fopen(DATAFILE_PATH, "a+");
+
+		if ((fp = fopen(DATAFILE_PATH, "a+")) == NULL)
+		{
+			perror("OPEN");
+			syslog(LOG_ERR, "OPEN");
+			exit(EXIT_FAILURE);
+		}
+
 		packetBuffer = malloc(BUFFER_SIZE+1);
 		char *line=NULL;
 		size_t len = 0;
@@ -180,11 +187,9 @@ int main(int argc, char** argv)
 				// set the start to the begining of the file
 				rewind(fp);
 				// read line by line and send on the socket
-				while((no_bytes = getline(&line, &len, 
-							  fp)) != -1)
+				while((no_bytes = getline(&line, &len, fp)) != -1)
 				{
-					if (send(new_fd, line, no_bytes, 0)
-					    == -1)
+					if (send(new_fd, line, no_bytes, 0) == -1)
 					{
 						perror("Failed to send");
 						syslog(LOG_ERR, "Send");
@@ -200,8 +205,14 @@ int main(int argc, char** argv)
 		close(new_fd);
 	  	syslog(LOG_INFO, "Closed connection from %s\n", s);
 	}
+	shutdown(sockfd, SHUT_RDWR);
+	close(sockfd);
 	clean_close();
 }
+
+//=====================================
+// 	HELPER FUNCTIONS
+//=====================================
 void  clean_close(void)
 {
 	syslog(LOG_ERR, "Closing");
