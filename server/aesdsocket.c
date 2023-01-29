@@ -143,7 +143,7 @@ int main(int argc, char** argv)
 //==============
 	
 	//set the action handlers
-    memset(&siga, 0, sizeof(struct sigaction));
+   	memset(&siga, 0, sizeof(struct sigaction));
 	siga.sa_handler = sig_handler;
 	if (sigaction(SIGINT, &siga, NULL) == -1)
 	{
@@ -218,7 +218,9 @@ int main(int argc, char** argv)
 				exit(EXIT_FAILURE);
 			}
 			syslog(LOG_INFO, "Daemon created %d", rv);
+			break;
 		}
+	
 	}
 
 	
