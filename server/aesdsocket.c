@@ -31,6 +31,7 @@ int sockfd;
 //=====================================
 void *accepting_thread_function(void * accepted_fd){
 	int new_fd = *((int *)accepted_fd);
+	int *retval = calloc(EXIT_FAILURE, sizeof(int));
 	ssize_t no_bytes; // signed
 	char* packetBuffer;
 	FILE* fp;
@@ -39,7 +40,7 @@ void *accepting_thread_function(void * accepted_fd){
 	{
 		perror("OPEN");
 		syslog(LOG_ERR, "OPEN");
-		return (void *)(EXIT_FAILURE);
+		return retval;
 	}
 
 	packetBuffer = malloc(BUFFER_SIZE+1);
@@ -52,14 +53,14 @@ void *accepting_thread_function(void * accepted_fd){
 		{
 			perror("Recieve");
 			syslog(LOG_ERR, "Receive error");
-			return (void *)(EXIT_FAILURE);
+			return retval;
 		}
 		packetBuffer[no_bytes] = '\0';
 		if (fprintf(fp, "%s", packetBuffer) <0)
 		{
 			perror("printing to file");
 			syslog(LOG_ERR, "printing to file");
-			return (void *)(EXIT_FAILURE);
+			return retval;
 		}
 		if (index(packetBuffer, '\n') != NULL)
 		{
@@ -72,18 +73,18 @@ void *accepting_thread_function(void * accepted_fd){
 				{
 					perror("Failed to send");
 					syslog(LOG_ERR, "Send");
-					return (void *)(EXIT_FAILURE);
+					return retval;
 				}
 				syslog(LOG_INFO, "Sent %ld", no_bytes);
 			}
 		}
 		
 	}while(no_bytes >0);
-	syslog(LOG_INFO, "Exited acceptloop");
 	free(packetBuffer);
 	fclose(fp);
-	close(new_fd);
-	return (void *)(EXIT_SUCCESS);
+	syslog(LOG_INFO, "Exited acceptloop");
+	*retval = EXIT_SUCCESS;
+	return retval;
 
 	
 }
@@ -266,8 +267,7 @@ int main(int argc, char** argv)
 			close(new_fd);
 			clean_close();
 		}
-		
-		if ( *((int *)retval) == EXIT_FAILURE )
+		if ( *(int *)retval == EXIT_FAILURE )
 		{
 			// Some error happend
 			perror("Inside Thread");
@@ -276,6 +276,7 @@ int main(int argc, char** argv)
 			clean_close();
 		}
 		syslog(LOG_INFO, "Closed connection from %s\n", s);
+		close(new_fd);
 	}
 	syslog(LOG_INFO, "Exited mainloop");
 	shutdown(sockfd, SHUT_RDWR);
