@@ -16,6 +16,7 @@
 //==============
 // 	MACROS
 //==============
+#define DEBUG(msg, ...)
 #define PORT "9000" 			
 #define BACKLOG 10   			
 #define BUFFER_SIZE 1024 		
@@ -29,62 +30,94 @@ int sockfd;
 //====================================
 // 	HELPER FUNCTIONS
 //=====================================
-void *accepting_thread_function(void * accepted_fd){
-	int new_fd = *((int *)accepted_fd);
-	int *retval = calloc(EXIT_FAILURE, sizeof(int));
-	ssize_t no_bytes; // signed
-	char* packetBuffer;
-	FILE* fp;
+void *accepting_thread_function(void * clientfdptr){
+	int fd;
+    int flags;
+    char *buf, *rbuf;
+    ssize_t len, cnt;
+    int clientfd = *(int*)clientfdptr;
+    //pthread_mutex_t mutex;
+    //int ret;
+
+    // Acquire mutex lock to guard simultaneous file I/O
+    /*
+    ret = pthread_mutex_lock(&mutex);
+    DEBUG("pthread_mutex_lock return: %d\n", ret);
+    if (ret != 0) {
+	error(-1, ret, "pthread_mutex_lock");
+    }
+    */
+    // Open data file, create if does not exist
+    flags = O_RDWR | O_APPEND;
+    if (access(DATAFILE_PATH, F_OK) != 0) flags |= O_CREAT;
+    if ((fd = open(DATAFILE_PATH, flags, 0644)) == -1) {
+	    perror("open");
+	    //pthread_exit((void *)-1);
+	    return (void *)-1;
+    }
+
+	// Allocate buffers
+    buf = (char *)malloc(BUFFER_SIZE+1);
+    rbuf = (char *)malloc(BUFFER_SIZE+1);
+
+    // Read incoming socket data stream, write to data file and return response to outgoing data stream
+    do {
+	// read incoming socket data stream
+	if ((len = recv(clientfd, (void *)buf, BUFFER_SIZE, 0)) == -1) {
+	    perror("recv");
+	    //pthread_exit((void *)-1);
+	    return (void *)-1;
+	}
 	
-	if ((fp = fopen(DATAFILE_PATH, "a+")) == NULL)
-	{
-		perror("OPEN");
-		syslog(LOG_ERR, "OPEN");
-		return retval;
+	// write to data file
+	buf[len] = '\0';
+	DEBUG("recv len: %d  buf: |%s|\n", (int)len, buf);
+	if ((write(fd, buf, len)) != len) {
+	    perror("write");
+	    //pthread_exit((void *)-1);
+	    return (void *)-1;
 	}
 
-	packetBuffer = malloc(BUFFER_SIZE+1);
-	char *line=NULL;
-	size_t len = 0;
-	do
-	{
-		syslog(LOG_INFO, "Entered acceptloop");
-		if ((no_bytes = recv(new_fd, packetBuffer, BUFFER_SIZE, 0)) == -1)
-		{
-			perror("Recieve");
-			syslog(LOG_ERR, "Receive error");
-			return retval;
-		}
-		packetBuffer[no_bytes] = '\0';
-		if (fprintf(fp, "%s", packetBuffer) <0)
-		{
-			perror("printing to file");
-			syslog(LOG_ERR, "printing to file");
-			return retval;
-		}
-		if (index(packetBuffer, '\n') != NULL)
-		{
-			// set the start to the begining of the file
-			rewind(fp);
-			// read line by line and send on the socket
-			while((no_bytes = getline(&line, &len, fp)) != -1)
-			{
-				if (send(new_fd, line, no_bytes, 0) == -1)
-				{
-					perror("Failed to send");
-					syslog(LOG_ERR, "Send");
-					return retval;
-				}
-				syslog(LOG_INFO, "Sent %ld", no_bytes);
-			}
-		}
+	// data packet found
+	if (index(buf, '\n') != 0) {
+
+	    // seek to beginning of file
+	    if (lseek(fd, 0, SEEK_SET) == (off_t)-1) {
+		perror("lseek");
+		//pthread_exit((void *)-1);
+		return (void *)-1;
+	    }
 		
-	}while(no_bytes >0);
-	free(packetBuffer);
-	fclose(fp);
-	syslog(LOG_INFO, "Exited acceptloop");
-	*retval = EXIT_SUCCESS;
-	return retval;
+	    // return file contents in outgoing data stream
+		rbuf[cnt] = '\0';
+		DEBUG("send cnt: %d rbuf: |%s|\n", (int)cnt, rbuf);
+		if ((cnt = send(clientfd, (void *)rbuf, cnt, 0)) == -1) {
+		    perror("send");
+		    //pthread_exit((void *)-1);
+		    return (void *)-1;
+		}
+		DEBUG("sent cnt: %d\n", (int)cnt);
+	    }
+	} while (len > 0); // socket data stream closed
+
+    // Free buffers
+    free(buf);
+    free(rbuf);
+
+    // Close data file
+    close(fd);
+
+    // Release mutex lock
+    /*
+    ret = pthread_mutex_unlock(&mutex);
+    DEBUG("pthread_mutex_unlock return: %d\n", ret);
+    if (ret != 0) {
+	error(-1, ret, "pthread_mutex_unlock");
+    }
+    */
+    // Exit thread with success
+    //pthread_exit((void *)0);
+    return (void *)0;
 
 	
 }
