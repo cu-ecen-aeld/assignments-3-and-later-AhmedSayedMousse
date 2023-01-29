@@ -128,7 +128,7 @@ void *get_in_addr(struct sockaddr *sa)
 int main(int argc, char** argv)
 {
 	int  new_fd, rv, yes=1;
-	char s[INET6_ADDRSTRLEN];
+	char s[INET_ADDRSTRLEN];
 	socklen_t sin_size; // size of addr string
 	pthread_t thread;
 	void *retval;
@@ -136,15 +136,32 @@ int main(int argc, char** argv)
 	struct addrinfo hints, *res;
 	struct sockaddr_storage their_addr;
 	struct sockaddr *their_addrPtr = (struct sockaddr *)&their_addr;
-	
+    socklen_t their_addrsize;
 //==============
 	openlog(NULL, LOG_NDELAY | LOG_PERROR | LOG_PID | LOG_CONS, LOG_USER);
+//==============
+	
+	//set the action handlers
+    memset(&siga, 0, sizeof(struct sigaction));
+	siga.sa_handler = sig_handler;
+	if (sigaction(SIGINT, &siga, NULL) == -1)
+	{
+		perror("SIGINT register");
+		syslog(LOG_ERR, "SIGINT couldn't register");
+		exit(EXIT_FAILURE);
+	}
+	if (sigaction(SIGTERM, &siga, NULL) == -1)
+	{
+		perror("SIGTERM register");
+		syslog(LOG_ERR, "SIGTERM couldn't register");
+		exit(EXIT_FAILURE);
+	}
 //==============
 
 	// Set the hints
 	memset(&(hints), 0, sizeof(hints));
 	hints.ai_flags = AI_PASSIVE;
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 //==============
 
@@ -154,11 +171,14 @@ int main(int argc, char** argv)
 		syslog(LOG_ERR, "getaddrinfo error: %s\n", gai_strerror(rv));
 		exit(EXIT_FAILURE);
 	}
+	if (res->ai_next != NULL) {
+		perror("More that one address identified\n");
+		exit(EXIT_FAILURE);
+    }
 //==============
 
 	// 
-	if ((sockfd=socket(res->ai_family, res->ai_socktype,
-				   res->ai_protocol)) == -1)
+	if ((sockfd=socket(res->ai_family, res->ai_socktype,res->ai_protocol)) == -1)
 	{
 		perror("Couldn't create socket");
 		syslog(LOG_ERR, "Server: Socket");
@@ -181,33 +201,7 @@ int main(int argc, char** argv)
 	}
 	// socket creation and binding is done.
 	syslog(LOG_DEBUG, "Socket created");
-	freeaddrinfo(res);
-	
-//==============
 
-	//listen
-	if (listen(sockfd, BACKLOG) == -1)
-	{
-		perror("Server didn't listen");
-		syslog(LOG_ERR, "Server: listen");
-		exit(EXIT_FAILURE);
-	}
-//==============
-	
-	//set the action handlers
-	siga.sa_handler = sig_handler;
-	if (sigaction(SIGINT, &siga, NULL) == -1)
-	{
-		perror("SIGINT register");
-		syslog(LOG_ERR, "SIGINT couldn't register");
-		exit(EXIT_FAILURE);
-	}
-	if (sigaction(SIGTERM, &siga, NULL) == -1)
-	{
-		perror("SIGTERM register");
-		syslog(LOG_ERR, "SIGTERM couldn't register");
-		exit(EXIT_FAILURE);
-	}
 //==============
 
 	char opt;
@@ -226,6 +220,17 @@ int main(int argc, char** argv)
 		}
 	}
 
+	
+//==============
+
+	//listen
+	if (listen(sockfd, BACKLOG) == -1)
+	{
+		perror("Server didn't listen");
+		syslog(LOG_ERR, "Server: listen");
+		exit(EXIT_FAILURE);
+	}
+//==============
 	//main loop
 	while(true)
 	{	
@@ -281,6 +286,7 @@ int main(int argc, char** argv)
 	syslog(LOG_INFO, "Exited mainloop");
 	shutdown(sockfd, SHUT_RDWR);
 	close(sockfd);
+	freeaddrinfo(res);
 	clean_close();
 }
 
