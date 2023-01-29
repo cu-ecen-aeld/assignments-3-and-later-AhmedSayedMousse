@@ -1,17 +1,18 @@
-#include <string.h> 
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netdb.h> 
-#include <syslog.h>
-#include <signal.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <arpa/inet.h>
+#include <string.h>
 #include <stdbool.h>
-#include <errno.h>
 #include <fcntl.h>
+#include <netdb.h>
+#include <syslog.h>
+#include <signal.h>
 #include <pthread.h>
+#include <error.h>
 
 //==============
 // 	MACROS
@@ -136,7 +137,6 @@ int main(int argc, char** argv)
 	struct addrinfo hints, *res;
 	struct sockaddr_storage their_addr;
 	struct sockaddr *their_addrPtr = (struct sockaddr *)&their_addr;
-    socklen_t their_addrsize;
 //==============
 	openlog(NULL, LOG_NDELAY | LOG_PERROR | LOG_PID | LOG_CONS, LOG_USER);
 //==============
@@ -236,8 +236,7 @@ int main(int argc, char** argv)
 	{	
 		syslog(LOG_INFO, "Entered mainloop");
 		sin_size = sizeof their_addr;
-		if ((new_fd = accept(sockfd, their_addrPtr,
-				     &sin_size)) == -1)
+		if ((new_fd = accept(sockfd, their_addrPtr, &sin_size)) == -1)
 		{
 			if ( errno == EINTR) clean_close();
 			perror("Error accepting");
@@ -249,8 +248,7 @@ int main(int argc, char** argv)
 			clean_close();
 		}
 		// Print the ip of the accepted connection
-		if (inet_ntop(their_addr.ss_family,
-		  get_in_addr(their_addrPtr), s, sizeof s) == NULL)
+		if (inet_ntop(their_addr.ss_family, get_in_addr(their_addrPtr), s, sizeof s) == NULL)
 		{
 			syslog(LOG_ERR, "inet_ntop");
 			exit(EXIT_FAILURE);
