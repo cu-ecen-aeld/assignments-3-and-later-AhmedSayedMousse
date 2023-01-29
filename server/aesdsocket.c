@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <error.h>
+#include <errno.h>
 
 //==============
 // 	MACROS
